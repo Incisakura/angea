@@ -1,0 +1,15 @@
+[package]
+name = "angea"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+unshare = "0.7.0"
+nix = "0.21.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1
+debug = 0
