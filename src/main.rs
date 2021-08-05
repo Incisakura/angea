@@ -1,21 +1,19 @@
 use std::env;
-use std::process;
 
 use angea::shell;
 use angea::systemd::Systemd;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        help();
-        process::exit(1);
-    }
-    match args[1].as_str() {
-        "boot"      => boot(),
-        "shell"     => shell(),
-        "shutdown"  => shutdown(),
-        _           => help()
-    }
+    match args.get(1) {
+        Some(c) => match c.as_str() {
+            "boot" => boot(),
+            "shell" => shell(),
+            "shutdown" => shutdown(),
+            _ => help(),
+        },
+        None => help(),
+    };
 }
 
 fn boot() {
