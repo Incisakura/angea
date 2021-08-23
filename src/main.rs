@@ -29,7 +29,7 @@ fn shutdown() {
 }
 
 fn help() {
-    print!("Angea v0.0.1
+    print!("Angea v0.0.2
 Usage: angea <command>
 Command:
     boot        Boot systemd as daemon
