@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::str::FromStr;
 
 use nix::mount::{self, MsFlags};
 use nix::sys::signal;
@@ -15,7 +16,7 @@ impl Systemd {
     /// Try to fetch systemd or create a new one
     pub fn new() -> Systemd {
         let process = Systemd::from_proc().expect("Unable to read /proc");
-        if process.is_running == true {
+        if process.is_running {
             return process;
         }
         Systemd::create()
@@ -27,11 +28,9 @@ impl Systemd {
             let entry = entry?;
             let mut path = entry.path();
             if path.is_dir() {
-                // ['', 'proc', 'pid_number']
-                let str: Vec<&str> = path.as_os_str().to_str().unwrap().split("/").collect();
-                let pid: i32 = match str[2].parse() {
-                    Ok(num) => num,
-                    _ => continue,
+                let pid = match path.file_name().and_then(|f| f.to_str()).map(i32::from_str) {
+                    Some(Ok(p)) => p,
+                    _ => continue
                 };
                 path.push("comm");
                 let comm = match fs::read_to_string(path) {
