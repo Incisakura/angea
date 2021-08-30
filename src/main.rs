@@ -21,6 +21,7 @@ fn boot() {
 }
 
 fn shell() {
+    boot();
     shell::enter();
 }
 

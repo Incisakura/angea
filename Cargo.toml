@@ -4,8 +4,10 @@ version = "0.0.2"
 edition = "2018"
 
 [dependencies]
-unshare = "0.7.0"
-nix = "0.20.0"
+dbus = "^0.9.3"
+libc = "^0.2.99"
+nix = "^0.20.0"
+unshare = "^0.7.0"
 
 [profile.release]
 opt-level = "z"
