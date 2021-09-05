@@ -11,7 +11,7 @@ use crate::ptyfwd::PTYForward;
 pub fn enter() {
     if is_inside() {
         println!("Systemd is already running in current PID namespace.");
-        return
+        return;
     }
 
     let owned_fd = get_master().expect("");
@@ -20,14 +20,11 @@ pub fn enter() {
 }
 
 fn is_inside() -> bool {
-    let status = Command::new("/usr/bin/systemctl")
+    Command::new("/usr/bin/systemctl")
         .arg("is-system-running")
         .stdout(Stdio::null())
-        .status();
-    match status {
-        Ok(status) => status.success(),
-        Err(_) => false
-    }
+        .status()
+        .map_or(false, |s| s.success())
 }
 
 fn get_master() -> Result<OwnedFd, Error> {
@@ -41,17 +38,15 @@ fn get_master() -> Result<OwnedFd, Error> {
         })
         .collect();
     let c = Connection::get_private(BusType::System)?;
-    let m = Message::new_method_call(
+    let mut m = Message::new_method_call(
         "org.freedesktop.machine1",
         "/org/freedesktop/machine1",
         "org.freedesktop.machine1.Manager",
         "OpenMachineShell",
     )
-    .unwrap()
-    // host | user | path
-    .append3(".host", "", "")
-    // args | envs
-    .append2(args, envs);
+    .unwrap();
+    // host | user | path | args | envs
+    m.append_all((".host", "", "", args, envs));
     let r = c.send_with_reply_and_block(m, 3000)?;
     let (owned_fd, _): (OwnedFd, String) = r.read2()?;
     // return ownedfd to keep ownership

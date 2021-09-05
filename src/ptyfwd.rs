@@ -9,7 +9,7 @@ use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::sys::epoll::{self, EpollEvent, EpollFlags, EpollOp};
 use nix::sys::signal::{sigprocmask, SigmaskHow, Signal};
 use nix::sys::signalfd::{signalfd, SfdFlags, SigSet, SignalFd, SIGNALFD_NEW};
-use nix::sys::termios::{self, Termios, LocalFlags, SetArg};
+use nix::sys::termios::{self, Termios, SetArg};
 use nix::unistd::{read, write};
 
 pub struct PTYForward {
@@ -209,9 +209,7 @@ impl PTYForward {
     }
 
     fn disconnect(&self) {
-        let mut out_attr = self.stdout_origin.clone();
-        out_attr.local_flags |= LocalFlags::ECHO;
-        termios::tcsetattr(self.stdout_fd, SetArg::TCSANOW, &out_attr).unwrap();
+        termios::tcsetattr(self.stdout_fd, SetArg::TCSANOW, &self.stdout_origin).unwrap();
         termios::tcsetattr(self.stdin_fd, SetArg::TCSANOW, &self.stdin_origin).unwrap();
         self.set_nonblock(false);
     }

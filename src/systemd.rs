@@ -1,5 +1,5 @@
 use std::fs;
-use std::io;
+use std::io::{self, Error};
 use std::str::FromStr;
 
 use nix::mount::{self, MsFlags};
@@ -9,14 +9,13 @@ use unshare::{Command, Namespace};
 
 pub struct Systemd {
     pub pid: i32,
-    pub is_running: bool,
 }
 
 impl Systemd {
     /// Try to fetch systemd or create a new one
     pub fn new() -> Systemd {
         let process = Systemd::from_proc().expect("Unable to read /proc");
-        if process.is_running {
+        if process.pid != 0 {
             return process;
         }
         Systemd::create()
@@ -30,7 +29,7 @@ impl Systemd {
             if path.is_dir() {
                 let pid = match path.file_name().and_then(|f| f.to_str()).map(i32::from_str) {
                     Some(Ok(p)) => p,
-                    _ => continue
+                    _ => continue,
                 };
                 path.push("comm");
                 let comm = match fs::read_to_string(path) {
@@ -38,30 +37,22 @@ impl Systemd {
                     _ => continue,
                 };
                 if comm.trim() == "systemd" {
-                    return Ok(Systemd {
-                        pid,
-                        is_running: true,
-                    });
+                    return Ok(Systemd { pid });
                 }
             }
         }
-        return Ok(Systemd {
-            pid: 0,
-            is_running: false,
-        });
+        return Ok(Systemd { pid: 0 });
     }
 
-    pub fn shutdown(&mut self) {
-        if self.is_running {
+    pub fn shutdown(self) {
+        if self.pid != 0 {
             signal::kill(Pid::from_raw(self.pid), signal::Signal::SIGKILL).unwrap_or_else(|_| {
-                println!(
-                    "Unable to kill to PID: {}. Are you in container?",
+                panic!(
+                    "Unable to kill systemd PID: {}. Are you in container?",
                     self.pid
                 );
             });
-            self.is_running = false;
         }
-        self.pid = 0;
     }
 
     fn create() -> Systemd {
@@ -70,7 +61,7 @@ impl Systemd {
             Command::new("/lib/systemd/systemd")
                 .unshare(&[Namespace::Pid, Namespace::Mount])
                 .allow_daemonize()
-                .pre_exec(|| {
+                .pre_exec(||
                     // Mount proc
                     mount::mount(
                         Some("proc"),
@@ -78,17 +69,12 @@ impl Systemd {
                         Some("proc"),
                         MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
                         None::<&str>,
-                    )
-                    .unwrap();
-                    Ok(())
-                })
+                    ).map_err(|_| Error::last_os_error())
+                )
                 .spawn()
-                .unwrap()
+                .expect("")
         };
 
-        return Systemd {
-            pid: child.pid(),
-            is_running: true,
-        };
+        return Systemd { pid: child.pid() };
     }
 }
