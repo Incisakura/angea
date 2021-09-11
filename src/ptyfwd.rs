@@ -28,8 +28,6 @@ pub struct PTYForward {
 
     stdin_origin: Termios,
     stdout_origin: Termios,
-
-    sig_fd: RawFd,
     sig_set: SigSet,
 }
 
@@ -45,6 +43,14 @@ impl PTYForward {
         sig_set.add(Signal::SIGWINCH);
         sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None).unwrap();
         let sig_fd = signalfd(SIGNALFD_NEW, &sig_set, SfdFlags::empty()).unwrap();
+
+        let mut stdin_event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
+        let mut master_event = EpollEvent::new(EpollFlags::EPOLLIN, 1);
+        let mut sig_event = EpollEvent::new(EpollFlags::EPOLLIN, 2);
+        epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, stdin_fd, &mut stdin_event).unwrap();
+        epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, master_fd, &mut master_event).unwrap();
+        epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, sig_fd, &mut sig_event).unwrap();
+
         Self {
             epoll,
             stdin_fd,
@@ -58,22 +64,15 @@ impl PTYForward {
             master_buffer_size: 0,
             stdin_origin,
             stdout_origin,
-            sig_fd,
             sig_set,
         }
     }
 
     pub fn wait(&mut self) {
-        let mut stdin_event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
-        let mut master_event = EpollEvent::new(EpollFlags::EPOLLIN, 1);
-        let mut sig_event = EpollEvent::new(EpollFlags::EPOLLIN, 2);
-        let mut sfd = SignalFd::with_flags(&self.sig_set, SfdFlags::empty()).unwrap();
-        self.add_event(self.stdin_fd, &mut stdin_event);
-        self.add_event(self.master_fd, &mut master_event);
-        self.add_event(self.sig_fd, &mut sig_event);
         self.set_nonblock(true);
         self.window_resize();
 
+        let mut sfd = SignalFd::with_flags(&self.sig_set, SfdFlags::empty()).unwrap();
         let mut events: Vec<EpollEvent> = Vec::with_capacity(256);
         'epoll: loop {
             events.clear();
@@ -105,10 +104,6 @@ impl PTYForward {
             }
         }
         self.disconnect();
-    }
-
-    fn add_event(&mut self, fd: RawFd, event: &mut EpollEvent) {
-        epoll::epoll_ctl(self.epoll, EpollOp::EpollCtlAdd, fd, event).unwrap();
     }
 
     // Return with (stdin_origin, stdout_origin)
