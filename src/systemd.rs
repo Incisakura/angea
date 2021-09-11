@@ -1,11 +1,14 @@
+use std::env;
+use std::ffi::CString;
 use std::fs;
-use std::io::{self, Error};
 use std::str::FromStr;
+use std::io;
 
-use nix::mount::{self, MsFlags};
-use nix::sys::signal;
+use nix::mount::{mount, MsFlags};
+use nix::sched::clone;
+use nix::sched::CloneFlags;
+use nix::sys::signal::{self, SIGCHLD};
 use nix::unistd::Pid;
-use unshare::{Command, Namespace};
 
 pub struct Systemd {
     pub pid: i32,
@@ -57,24 +60,32 @@ impl Systemd {
 
     fn create() -> Systemd {
         // Spawn child process
-        let child = unsafe {
-            Command::new("/lib/systemd/systemd")
-                .unshare(&[Namespace::Pid, Namespace::Mount])
-                .allow_daemonize()
-                .pre_exec(||
-                    // Mount proc
-                    mount::mount(
-                        Some("proc"),
-                        "/proc",
-                        Some("proc"),
-                        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
-                        None::<&str>,
-                    ).map_err(|_| Error::last_os_error())
+        let mut stack = [0; 4096];
+        let pid = clone(
+            Box::new(|| -> isize {
+                let filename = CString::new("/lib/systemd/systemd").unwrap();
+                let args: Vec<CString> = vec![CString::new("systemd").unwrap()];
+                let environ: Vec<CString> = env::vars()
+                    .map(|(k, v)| CString::new(format!("{}={}", k, v)).unwrap())
+                    .collect();
+                mount(
+                    Some("proc"),
+                    "/proc",
+                    Some("proc"),
+                    MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV,
+                    None::<&str>,
                 )
-                .spawn()
-                .expect("")
-        };
+                .unwrap();
+                nix::unistd::execve(filename.as_c_str(), &args, &environ).unwrap();
+                0
+            }),
+            &mut stack,
+            CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
+            Some(SIGCHLD as i32),
+        )
+        .unwrap()
+        .as_raw();
 
-        return Systemd { pid: child.pid() };
+        return Systemd { pid };
     }
 }

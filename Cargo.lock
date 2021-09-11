@@ -9,7 +9,6 @@ dependencies = [
  "dbus",
  "libc",
  "nix",
- "unshare",
 ]
 
 [[package]]
@@ -73,9 +72,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.20.1"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df8e5e343312e7fbeb2a52139114e9e702991ef9c2aea6817ff2440b35647d56"
+checksum = "e7555d6c7164cc913be1ce7f95cbecdabda61eb2ccd89008524af306fb7f5031"
 dependencies = [
  "bitflags",
  "cc",
@@ -89,16 +88,6 @@ name = "pkg-config"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3831453b3449ceb48b6d9c7ad7c96d5ea673e9b470a1dc578c2ce6521230884c"
-
-[[package]]
-name = "unshare"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ceda295552a1eda89f8a748237654ad76b9c87e383fc07af5c4e423eb8e7b9b"
-dependencies = [
- "libc",
- "nix",
-]
 
 [[package]]
 name = "winapi"

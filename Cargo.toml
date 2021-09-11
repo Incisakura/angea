@@ -6,8 +6,7 @@ edition = "2018"
 [dependencies]
 dbus = {version="^0.9.3", features=["no-string-validation"]}
 libc = "^0.2.99"
-nix = "^0.20.0"
-unshare = "^0.7.0"
+nix = "^0.22.1"
 
 [profile.release]
 opt-level = "z"

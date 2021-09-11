@@ -3,7 +3,6 @@ use std::mem;
 use std::os::unix::io::{AsRawFd, RawFd};
 
 use libc::{winsize, TIOCGWINSZ, TIOCSWINSZ};
-use nix::Error;
 use nix::errno::Errno;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::sys::epoll::{self, EpollEvent, EpollFlags, EpollOp};
@@ -171,7 +170,7 @@ impl PTYForward {
                     }
                     Err(e) => {
                         // EWOULDBLOCK
-                        if e == Error::Sys(Errno::EAGAIN) {
+                        if e == Errno::EAGAIN {
                             self.stdin_readable = false;
                             self.in_buffer_size = 0;
                         }
@@ -191,10 +190,10 @@ impl PTYForward {
                     }
                     Err(e) => {
                         // EWOULDBLOCK
-                        if e == Error::Sys(Errno::EAGAIN) {
+                        if e == Errno::EAGAIN {
                             self.master_readable = false;
                             self.master_buffer_size = 0;
-                        } else if e == Error::Sys(Errno::EIO) {
+                        } else if e == Errno::EIO {
                             // master is closed, disconnect
                             return false;
                         }
