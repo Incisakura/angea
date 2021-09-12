@@ -164,8 +164,7 @@ impl PTYForward {
                         }
                     }
                     Err(e) => {
-                        // EWOULDBLOCK
-                        if e == Errno::EAGAIN {
+                        if e == Errno::EWOULDBLOCK {
                             self.stdin_readable = false;
                             self.in_buffer_size = 0;
                         }
@@ -184,8 +183,7 @@ impl PTYForward {
                         }
                     }
                     Err(e) => {
-                        // EWOULDBLOCK
-                        if e == Errno::EAGAIN {
+                        if e == Errno::EWOULDBLOCK {
                             self.master_readable = false;
                             self.master_buffer_size = 0;
                         } else if e == Errno::EIO {
