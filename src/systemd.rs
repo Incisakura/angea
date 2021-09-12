@@ -7,7 +7,7 @@ use std::io;
 use nix::mount::{mount, MsFlags};
 use nix::sched::clone;
 use nix::sched::CloneFlags;
-use nix::sys::signal::{self, SIGCHLD};
+use nix::sys::signal;
 use nix::unistd::Pid;
 
 pub struct Systemd {
@@ -81,7 +81,7 @@ impl Systemd {
             }),
             &mut stack,
             CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
-            Some(SIGCHLD as i32),
+            None,
         )
         .unwrap()
         .as_raw();
