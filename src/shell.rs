@@ -21,7 +21,9 @@ pub fn enter() {
         Ok(fd) => fd,
         Err(e) => unsafe { panic!("{}", CStr::from_ptr(e.message).to_str().unwrap()) },
     };
-    let mut f = PTYForward::new(owned_fd);
+    let mut f = PTYForward::new(owned_fd).unwrap_or_else(|e| {
+        panic!("{}", e.desc());
+    });
     f.wait();
 }
 
