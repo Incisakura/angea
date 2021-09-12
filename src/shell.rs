@@ -3,8 +3,8 @@ use std::ffi::{CStr, CString};
 use std::mem;
 use std::os::raw::c_void;
 use std::os::unix::io::RawFd;
-use std::ptr;
 use std::process::{Command, Stdio};
+use std::ptr;
 use std::result::Result;
 
 use libdbus_sys::*;
@@ -17,9 +17,10 @@ pub fn enter() {
         return;
     }
 
-    let owned_fd = match unsafe { get_master() } {
-        Ok(fd) => fd,
-        Err(e) => unsafe { panic!("{}", CStr::from_ptr(e.message).to_str().unwrap()) },
+    let owned_fd = unsafe {
+        get_master().unwrap_or_else(|e| {
+            panic!("{}", CStr::from_ptr(e.message).to_str().unwrap());
+        })
     };
     let mut f = PTYForward::new(owned_fd).unwrap_or_else(|e| {
         panic!("{}", e.desc());
@@ -45,7 +46,7 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
             &value.as_ptr() as *const _ as *const c_void,
         );
     }
-    
+
     unsafe fn append_array_string(
         m: *mut DBusMessage,
         iter: *mut DBusMessageIter,
