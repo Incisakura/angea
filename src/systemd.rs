@@ -1,14 +1,12 @@
-use std::env;
 use std::ffi::CString;
 use std::fs;
-use std::str::FromStr;
 use std::io;
+use std::str::FromStr;
 
 use nix::mount::{mount, MsFlags};
-use nix::sched::clone;
-use nix::sched::CloneFlags;
+use nix::sched::{clone, CloneFlags};
 use nix::sys::signal;
-use nix::unistd::Pid;
+use nix::unistd::{execve, Pid};
 
 pub struct Systemd {
     pub pid: i32,
@@ -63,11 +61,8 @@ impl Systemd {
         let mut stack = [0; 4096];
         let pid = clone(
             Box::new(|| -> isize {
-                let filename = CString::new("/lib/systemd/systemd").unwrap();
-                let args: Vec<CString> = vec![CString::new("systemd").unwrap()];
-                let environ: Vec<CString> = env::vars()
-                    .map(|(k, v)| CString::new(format!("{}={}", k, v)).unwrap())
-                    .collect();
+                let args: Vec<CString> = vec![CString::new("/lib/systemd/systemd").unwrap()];
+                let environ: Vec<CString> = Vec::new();
                 mount(
                     Some("proc"),
                     "/proc",
@@ -76,7 +71,7 @@ impl Systemd {
                     None::<&str>,
                 )
                 .unwrap();
-                nix::unistd::execve(filename.as_c_str(), &args, &environ).unwrap();
+                execve(args[0].as_c_str(), &args, &environ).unwrap();
                 0
             }),
             &mut stack,
