@@ -4,8 +4,8 @@ version = "0.0.3"
 edition = "2018"
 
 [dependencies]
-dbus = {version="^0.9.3", features=["no-string-validation"]}
 libc = "^0.2.99"
+libdbus-sys = "0.2.1"
 nix = "^0.22.1"
 
 [profile.release]
