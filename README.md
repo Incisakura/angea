@@ -18,10 +18,16 @@ See `angea help`
 >Command:
 >
 > - **boot**: Boot systemd as daemon
-> - **shell**: Init bash shell in container
-> - **shutdown**: Kill runing systemd
+> - **shell**: Open a shell in container
+> - **shutdown**: Kill running systemd
 
-If you want to use shell completely inside systemd, please install `systemd-container`, then run `machinectl shell {username}@` after `angea boot`.
+## Requirement
+
+`systemd-container`
+
+In some distributions, it isn't built-in with systemd or preinstalled.
+
+So you may need install it manually before running `angea shell`.
 
 ## Credit
 

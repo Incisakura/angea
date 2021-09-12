@@ -34,8 +34,8 @@ fn help() {
 Usage: angea <command>
 Command:
     boot        Boot systemd as daemon
-    shell       Init bash shell in container
-    shutdown    Kill runing systemd
+    shell       Open a shell in container
+    shutdown    Kill running systemd
     help        This message
 ");
 }
