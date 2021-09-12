@@ -29,6 +29,7 @@ fn is_inside() -> bool {
     Command::new("/usr/bin/systemctl")
         .arg("is-system-running")
         .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map_or(false, |s| s.success())
 }
