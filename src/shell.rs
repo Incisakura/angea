@@ -38,7 +38,7 @@ fn is_inside() -> bool {
 }
 
 unsafe fn get_master() -> Result<RawFd, DBusError> {
-    unsafe fn append_string(iter: *mut DBusMessageIter, value: &str) {
+    unsafe fn append_string<T: Into<Vec<u8>>>(iter: *mut DBusMessageIter, value: T) {
         let value = CString::new(value).unwrap();
         dbus_message_iter_append_basic(
             iter,
@@ -47,17 +47,17 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
         );
     }
 
-    unsafe fn append_array_string(
+    unsafe fn append_array_string<T: Into<Vec<u8>>>(
         m: *mut DBusMessage,
         iter: *mut DBusMessageIter,
-        values: Vec<String>,
+        values: Vec<T>,
     ) {
         let signature = CString::new("s").unwrap();
         let mut i = mem::zeroed();
         dbus_message_iter_init_append(m, &mut i);
         dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, signature.as_ptr(), &mut i);
         for value in values {
-            append_string(&mut i, value.as_str());
+            append_string(&mut i, value);
         }
         dbus_message_iter_close_container(iter, &mut i);
     }
