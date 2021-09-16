@@ -7,7 +7,7 @@ use nix::errno::Errno;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::sys::epoll::{self, EpollEvent, EpollFlags, EpollOp};
 use nix::sys::signal::{sigprocmask, SigmaskHow, Signal};
-use nix::sys::signalfd::{signalfd, SfdFlags, SigSet, SignalFd, SIGNALFD_NEW};
+use nix::sys::signalfd::{SigSet, SignalFd};
 use nix::sys::termios::{self, SetArg, Termios};
 use nix::unistd::{read, write};
 use nix::Result;
@@ -27,7 +27,7 @@ pub struct PTYForward {
 
     stdin_origin: Termios,
     stdout_origin: Termios,
-    sig_set: SigSet,
+    signal_fd: SignalFd,
 }
 
 impl PTYForward {
@@ -41,14 +41,14 @@ impl PTYForward {
         let mut sig_set = SigSet::empty();
         sig_set.add(Signal::SIGWINCH);
         sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None)?;
-        let sig_fd = signalfd(SIGNALFD_NEW, &sig_set, SfdFlags::empty())?;
+        let signal_fd = SignalFd::new(&sig_set)?;
 
         let mut stdin_event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
         let mut master_event = EpollEvent::new(EpollFlags::EPOLLIN, 1);
         let mut sig_event = EpollEvent::new(EpollFlags::EPOLLIN, 2);
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, stdin_fd, &mut stdin_event)?;
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, master_fd, &mut master_event)?;
-        epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, sig_fd, &mut sig_event)?;
+        epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, signal_fd.as_raw_fd(), &mut sig_event)?;
 
         let f = Self {
             epoll,
@@ -61,7 +61,7 @@ impl PTYForward {
             out_buffer: [0; 4096],
             stdin_origin,
             stdout_origin,
-            sig_set,
+            signal_fd,
         };
         f.set_nonblock(true)?;
         f.window_resize()?;
@@ -70,7 +70,6 @@ impl PTYForward {
     }
 
     pub fn wait(&mut self) {
-        let mut sfd = SignalFd::with_flags(&self.sig_set, SfdFlags::empty()).unwrap();
         let mut events: Vec<EpollEvent> = Vec::with_capacity(256);
         'epoll: loop {
             events.clear();
@@ -100,7 +99,7 @@ impl PTYForward {
                     }
                     2 => {
                         // signal
-                        sfd.read_signal().unwrap();
+                        self.signal_fd.read_signal().unwrap();
                         self.window_resize().unwrap();
                     }
                     _ => {}
