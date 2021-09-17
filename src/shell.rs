@@ -1,10 +1,8 @@
 use std::env;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::mem;
-use std::os::raw::c_void;
 use std::os::unix::io::RawFd;
 use std::process::{Command, Stdio};
-use std::ptr;
 use std::result::Result;
 
 use libdbus_sys::*;
@@ -13,8 +11,7 @@ use crate::ptyfwd::PTYForward;
 
 pub fn enter() {
     if is_inside() {
-        println!("Systemd is already running in current PID namespace.");
-        return;
+        panic!("Systemd is already running in current PID namespace.");
     }
 
     let owned_fd = unsafe {
@@ -38,26 +35,24 @@ fn is_inside() -> bool {
 }
 
 unsafe fn get_master() -> Result<RawFd, DBusError> {
-    unsafe fn append_string<T: Into<Vec<u8>>>(iter: *mut DBusMessageIter, value: T) {
-        let value = CString::new(value).unwrap();
+    unsafe fn append_string(iter: *mut DBusMessageIter, value: &str) {
         dbus_message_iter_append_basic(
             iter,
             DBUS_TYPE_STRING,
-            &value.as_ptr() as *const _ as *const c_void,
+            &value.as_ptr() as *const _ as *const _,
         );
     }
 
-    unsafe fn append_array_string<T: Into<Vec<u8>>>(
+    unsafe fn append_array_string(
         m: *mut DBusMessage,
         iter: *mut DBusMessageIter,
-        values: Vec<T>,
+        values: Vec<String>,
     ) {
-        let signature = CString::new("s").unwrap();
-        let mut i = mem::zeroed();
+        let mut i: DBusMessageIter = mem::zeroed();
         dbus_message_iter_init_append(m, &mut i);
-        dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, signature.as_ptr(), &mut i);
+        dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "s\0".as_ptr() as *const _, &mut i);
         for value in values {
-            append_string(&mut i, value);
+            append_string(&mut i, value.as_str());
         }
         dbus_message_iter_close_container(iter, &mut i);
     }
@@ -66,56 +61,54 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
     let envs: Vec<String> = env::vars()
         .filter_map(|(k, v)| {
             if k == "PATH" || k == "TERM" || k == "LANG" {
-                return Some(format!("{}={}", k, v));
+                return Some(format!("{}={}\0", k, v));
             }
             None
         })
         .collect();
 
     // Init connection
-    let mut e = DBusError {
-        name: ptr::null(),
-        message: ptr::null(),
-        dummy: 0,
-        padding1: ptr::null(),
-    };
+    let mut e: DBusError = mem::zeroed();
     dbus_error_init(&mut e);
-    let conn = dbus_bus_get_private(DBusBusType::System, &mut e);
+    let conn: *mut DBusConnection = dbus_bus_get_private(DBusBusType::System, &mut e);
     if conn.is_null() {
         return Err(e);
     }
 
     // new method call
-    let dest = CString::new("org.freedesktop.machine1").unwrap();
-    let path = CString::new("/org/freedesktop/machine1").unwrap();
-    let iface = CString::new("org.freedesktop.machine1.Manager").unwrap();
-    let method = CString::new("OpenMachineShell").unwrap();
-    let m = dbus_message_new_method_call(
-        dest.as_ptr(),
-        path.as_ptr(),
-        iface.as_ptr(),
-        method.as_ptr(),
+    let m: *mut DBusMessage = dbus_message_new_method_call(
+        "org.freedesktop.machine1\0".as_ptr() as *const _,
+        "/org/freedesktop/machine1\0".as_ptr() as *const _,
+        "org.freedesktop.machine1.Manager\0".as_ptr() as *const _,
+        "OpenMachineShell\0".as_ptr() as *const _,
     );
 
     // Append args
     let mut iter: DBusMessageIter = mem::zeroed();
     dbus_message_iter_init_append(m, &mut iter);
-    append_string(&mut iter, ".host");
-    append_string(&mut iter, "");
-    append_string(&mut iter, "");
-    append_array_string(m as *mut _, &mut iter, args);
-    append_array_string(m as *mut _, &mut iter, envs);
+    append_string(&mut iter, ".host\0");
+    append_string(&mut iter, "\0");
+    append_string(&mut iter, "\0");
+    append_array_string(m, &mut iter, args);
+    append_array_string(m, &mut iter, envs);
 
-    // Send message and recive reply
-    let m = dbus_connection_send_with_reply_and_block(conn as *mut _, m as *mut _, 3000, &mut e);
+    // Send message and recive reply then close conn
+    let msg = dbus_connection_send_with_reply_and_block(conn, m, 3000, &mut e);
     if m.is_null() {
         return Err(e);
     }
 
     // Get result
     let mut i: DBusMessageIter = mem::zeroed();
-    dbus_message_iter_init(m, &mut i);
+    dbus_message_iter_init(msg, &mut i);
     let mut fd: RawFd = mem::zeroed();
-    dbus_message_iter_get_basic(&mut i, &mut fd as *mut _ as *mut c_void);
+    dbus_message_iter_get_basic(&mut i, &mut fd as *mut _ as *mut _);
+
+    // Release all pointer resources
+    dbus_connection_close(conn);
+    dbus_connection_unref(conn);
+    dbus_message_unref(m);
+    dbus_message_unref(msg);
+
     Ok(fd)
 }
