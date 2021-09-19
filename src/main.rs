@@ -11,8 +11,9 @@ fn main() {
                 Systemd::fetch_or_create();
             }
             "shell" => {
+                let user = args.get(2).map_or("root", |s| s.as_str());
                 Systemd::fetch_or_create();
-                shell::enter();
+                shell::enter(user);
             }
             "shutdown" => {
                 Systemd::fetch().map(|s| s.shutdown());
@@ -26,12 +27,12 @@ fn main() {
 fn help() {
     print!(
         "Angea v0.0.4
-Usage: angea <command>
+Usage: angea <command> [more]
 Command:
-    boot        Boot systemd as daemon
-    shell       Open a shell in container
-    shutdown    Kill running systemd
-    help        This message
+    boot            Boot systemd as daemon
+    shell [user]    Open a shell in container. Default: root
+    shutdown        Kill running systemd
+    help            This message
 "
     );
 }

@@ -9,13 +9,13 @@ use libdbus_sys::*;
 
 use crate::ptyfwd::PTYForward;
 
-pub fn enter() {
+pub fn enter(user: &str) {
     if is_inside() {
         panic!("Systemd is already running in current PID namespace.");
     }
 
     let owned_fd = unsafe {
-        get_master().unwrap_or_else(|e| {
+        get_master(user).unwrap_or_else(|e| {
             panic!("{}", CStr::from_ptr(e.message).to_str().unwrap());
         })
     };
@@ -34,7 +34,7 @@ fn is_inside() -> bool {
         .map_or(false, |s| s.success())
 }
 
-unsafe fn get_master() -> Result<RawFd, DBusError> {
+unsafe fn get_master(user: &str) -> Result<RawFd, DBusError> {
     unsafe fn append_string(iter: *mut DBusMessageIter, value: &str) {
         dbus_message_iter_append_basic(
             iter,
@@ -57,6 +57,7 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
         dbus_message_iter_close_container(iter, &mut i);
     }
 
+    // Prepare arguments
     let args: Vec<String> = Vec::new();
     let envs: Vec<String> = env::vars()
         .filter_map(|(k, v)| {
@@ -66,6 +67,8 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
             None
         })
         .collect();
+    let mut user = String::from(user);
+    user.push('\0');
 
     // Init connection
     let mut e: DBusError = mem::zeroed();
@@ -87,7 +90,7 @@ unsafe fn get_master() -> Result<RawFd, DBusError> {
     let mut iter: DBusMessageIter = mem::zeroed();
     dbus_message_iter_init_append(m, &mut iter);
     append_string(&mut iter, ".host\0");
-    append_string(&mut iter, "\0");
+    append_string(&mut iter, user.as_str());
     append_string(&mut iter, "\0");
     append_array_string(m, &mut iter, args);
     append_array_string(m, &mut iter, envs);
