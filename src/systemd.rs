@@ -7,23 +7,30 @@ use nix::mount::{mount, MsFlags};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::signal;
 use nix::unistd::{execve, Pid};
+use nix::Result;
 
-pub struct Systemd {
-    pub pid: i32,
-}
+pub struct Systemd(Pid);
 
 impl Systemd {
-    /// Try to fetch systemd or create a new one
-    pub fn new() -> Systemd {
-        let process = Systemd::from_proc().expect("Unable to read /proc");
-        if process.pid != 0 {
-            return process;
+    /// Try to fetch running systemd
+    pub fn fetch() -> Option<Systemd> {
+        let raw_pid = Self::from_proc().expect("Unable to read /proc");
+        if raw_pid == 0 {
+            return None;
         }
-        Systemd::create()
+        Some(Self(Pid::from_raw(raw_pid)))
+    }
+
+    /// Try to fetch systemd or create a new one
+    pub fn fetch_or_create() -> Systemd {
+        match Self::fetch() {
+            Some(s) => s,
+            None => Self::create().expect("Unable to spawn systemd"),
+        }
     }
 
     /// Try to fetch systemd from /proc
-    pub fn from_proc() -> io::Result<Systemd> {
+    fn from_proc() -> io::Result<i32> {
         for entry in fs::read_dir("/proc")? {
             let entry = entry?;
             let mut path = entry.path();
@@ -38,25 +45,25 @@ impl Systemd {
                     _ => continue,
                 };
                 if comm.trim() == "systemd" {
-                    return Ok(Systemd { pid });
+                    return Ok(pid);
                 }
             }
         }
-        return Ok(Systemd { pid: 0 });
+        return Ok(0);
     }
 
     pub fn shutdown(self) {
-        if self.pid != 0 {
-            signal::kill(Pid::from_raw(self.pid), signal::Signal::SIGKILL).unwrap_or_else(|_| {
+        if self.0.as_raw() != 0 {
+            signal::kill(self.0, signal::Signal::SIGKILL).unwrap_or_else(|_| {
                 panic!(
                     "Unable to kill systemd PID: {}. Are you in container?",
-                    self.pid
+                    self.0.as_raw()
                 );
             });
         }
     }
 
-    fn create() -> Systemd {
+    fn create() -> Result<Systemd> {
         // Spawn child process
         let mut stack = [0; 4096];
         let pid = clone(
@@ -77,10 +84,8 @@ impl Systemd {
             &mut stack,
             CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
             None,
-        )
-        .unwrap()
-        .as_raw();
+        )?;
 
-        return Systemd { pid };
+        return Ok(Systemd(pid));
     }
 }
