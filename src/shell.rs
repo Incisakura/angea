@@ -19,10 +19,8 @@ pub fn enter(user: &str) {
             panic!("{}", CStr::from_ptr(e.message).to_str().unwrap());
         })
     };
-    let mut f = PTYForward::new(owned_fd).unwrap_or_else(|e| {
-        panic!("{}", e.desc());
-    });
-    f.wait();
+    let mut f = PTYForward::new(owned_fd).unwrap_or_else(|e| panic!("{}", e.desc()));
+    f.wait().unwrap_or_else(|e| panic!("{}", e.desc()));
 }
 
 fn is_inside() -> bool {
