@@ -3,23 +3,13 @@
 ---
 > Naming from hydrangea(アジサイ)
 
-A command-line tool to make systemd work in WSL2(Windows Subsystem for Linux 2)
+A lite tool to make systemd work in any container(Windows Subsystem for Linux 2, Docker, Podman, etc.)
 
-## How it works
+**WSL1 is not supported.**
 
-Systemd needs to work on PID 1, so Angea creates a new PID namespace for systemd.
-
-## How to use
+## Usage
 
 See `angea help`
-
->Usage: angea `command`
->
->Command:
->
-> - **boot**: Boot systemd as daemon
-> - **shell**: Open a shell in container
-> - **shutdown**: Kill running systemd
 
 ## Requirement
 
