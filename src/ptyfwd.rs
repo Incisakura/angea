@@ -96,7 +96,7 @@ impl PTYForward {
     fn set_termios() -> Result<(Termios, Termios)> {
         fn set(fd: RawFd) -> Result<Termios> {
             let stdin_origin = termios::tcgetattr(fd)?;
-            let mut stdin_attr = stdin_origin.clone();
+            let mut stdin_attr: Termios = unsafe { mem::zeroed() };
             termios::cfmakeraw(&mut stdin_attr);
             termios::tcsetattr(fd, SetArg::TCSANOW, &stdin_attr)?;
             Ok(stdin_origin)
