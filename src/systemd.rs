@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use nix::mount::{mount, MsFlags};
 use nix::sched::{clone, CloneFlags};
-use nix::sys::signal;
+use nix::sys::signal::{kill, Signal};
 use nix::unistd::{execve, Pid};
 use nix::Result;
 
@@ -32,8 +32,7 @@ impl Systemd {
     /// Try to fetch systemd from /proc
     fn from_proc() -> io::Result<i32> {
         for entry in fs::read_dir("/proc")? {
-            let entry = entry?;
-            let mut path = entry.path();
+            let mut path = entry?.path();
             if path.is_dir() {
                 let pid = match path.file_name().and_then(|f| f.to_str()).map(i32::from_str) {
                     Some(Ok(p)) => p,
@@ -44,7 +43,7 @@ impl Systemd {
                     Ok(str) => str,
                     _ => continue,
                 };
-                if comm.trim() == "systemd" {
+                if comm == "systemd\n" {
                     return Ok(pid);
                 }
             }
@@ -54,7 +53,7 @@ impl Systemd {
 
     pub fn shutdown(self) {
         if self.0.as_raw() != 0 {
-            signal::kill(self.0, signal::Signal::SIGKILL).unwrap_or_else(|_| {
+            kill(self.0, Signal::SIGKILL).unwrap_or_else(|_| {
                 panic!(
                     "Unable to kill systemd PID: {}. Are you in container?",
                     self.0.as_raw()
