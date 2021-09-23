@@ -95,7 +95,7 @@ unsafe fn get_master(user: &str) -> Result<RawFd, DBusError> {
 
     // Send message and recive reply then close conn
     let msg = dbus_connection_send_with_reply_and_block(conn, m, 3000, &mut e);
-    if m.is_null() {
+    if msg.is_null() {
         return Err(e);
     }
 
