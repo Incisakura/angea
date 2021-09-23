@@ -28,22 +28,21 @@ pub struct PTYForward {
 impl PTYForward {
     /// Try to setup ptyforward
     pub fn new(master_fd: RawFd) -> Result<Self> {
-        let epoll = epoll::epoll_create()?;
-
-        let (stdin_origin, stdout_origin) = Self::set_termios()?;
-
         let mut sig_set = SigSet::empty();
         sig_set.add(Signal::SIGWINCH);
         sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None)?;
         let signal_fd = SignalFd::new(&sig_set)?;
         let sig_fd = signal_fd.as_raw_fd();
 
+        let epoll = epoll::epoll_create()?;
         let mut stdin_event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
         let mut master_event = EpollEvent::new(EpollFlags::EPOLLIN, 1);
         let mut sig_event = EpollEvent::new(EpollFlags::EPOLLIN, 2);
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, STDIN, &mut stdin_event)?;
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, master_fd, &mut master_event)?;
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, sig_fd, &mut sig_event)?;
+
+        let (stdin_origin, stdout_origin) = Self::set_termios()?;
 
         let f = Self {
             epoll,
