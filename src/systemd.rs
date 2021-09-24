@@ -78,7 +78,7 @@ impl Systemd {
                 )
                 .unwrap();
                 execve(args[0].as_c_str(), &args, &environ).unwrap();
-                0
+                unreachable!();
             }),
             &mut stack,
             CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
