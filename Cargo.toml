@@ -9,7 +9,7 @@ libdbus-sys = "0.2.1"
 nix = "^0.22.1"
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = true
 panic = "abort"
 codegen-units = 1
