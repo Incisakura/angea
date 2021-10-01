@@ -13,11 +13,7 @@ See `angea help`
 
 ## Requirement
 
-`systemd-container`
-
-In some distributions, it isn't built-in with systemd or preinstalled.
-
-So you may need install it manually before running `angea shell`.
+No! But you should install `systemd` as least.
 
 ## Credit
 
