@@ -1,12 +1,17 @@
 use std::env;
-use std::ffi::CStr;
-use std::mem;
+use std::fs;
 use std::os::unix::io::RawFd;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::result::Result;
+use std::thread;
+use std::time::Duration;
 
-use libdbus_sys::*;
+use nix::errno::Errno;
+use nix::pty::openpty;
+use nix::unistd::{close, read};
 
+use crate::dbus::DBus;
 use crate::ptyfwd::PTYForward;
 
 pub fn enter(user: &str) {
@@ -14,12 +19,8 @@ pub fn enter(user: &str) {
         panic!("Systemd is already running in current PID namespace.");
     }
 
-    let owned_fd = unsafe {
-        get_master(user).unwrap_or_else(|e| {
-            panic!("{}", CStr::from_ptr(e.message).to_str().unwrap());
-        })
-    };
-    let mut f = PTYForward::new(owned_fd).unwrap_or_else(|e| panic!("{}", e.desc()));
+    let master = unsafe { get_pty(user).unwrap_or_else(|e| panic!("{}", e)) };
+    let mut f = PTYForward::new(master).unwrap_or_else(|e| panic!("{}", e.desc()));
     f.wait().unwrap_or_else(|e| panic!("{}", e.desc()));
 }
 
@@ -32,31 +33,8 @@ fn is_inside() -> bool {
         .map_or(false, |s| s.success())
 }
 
-unsafe fn get_master(user: &str) -> Result<RawFd, DBusError> {
-    unsafe fn append_string(iter: *mut DBusMessageIter, value: &str) {
-        dbus_message_iter_append_basic(
-            iter,
-            DBUS_TYPE_STRING,
-            &value.as_ptr() as *const _ as *const _,
-        );
-    }
-
-    unsafe fn append_array_string(
-        m: *mut DBusMessage,
-        iter: *mut DBusMessageIter,
-        values: Vec<String>,
-    ) {
-        let mut i: DBusMessageIter = mem::zeroed();
-        dbus_message_iter_init_append(m, &mut i);
-        dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "s\0".as_ptr() as *const _, &mut i);
-        for value in values {
-            append_string(&mut i, value.as_str());
-        }
-        dbus_message_iter_close_container(iter, &mut i);
-    }
-
-    // Prepare arguments
-    let args: Vec<String> = Vec::new();
+unsafe fn get_pty(user: &str) -> Result<RawFd, String> {
+    // collect environment variables
     let envs: Vec<String> = env::vars()
         .filter_map(|(k, v)| {
             if k == "PATH" || k == "TERM" || k == "LANG" {
@@ -65,51 +43,35 @@ unsafe fn get_master(user: &str) -> Result<RawFd, DBusError> {
             None
         })
         .collect();
-    let mut user = String::from(user);
-    user.push('\0');
 
-    // Init connection
-    let mut e: DBusError = mem::zeroed();
-    dbus_error_init(&mut e);
-    let conn: *mut DBusConnection = dbus_bus_get_private(DBusBusType::System, &mut e);
-    if conn.is_null() {
-        return Err(e);
+    // init pty peer
+    let pty = openpty(None, None).map_err(|e| e.desc())?;
+    let path = PathBuf::from(format!("/proc/self/fd/{}", pty.slave));
+    let path = fs::read_link(path).map_err(|e| e.to_string())?;
+    let pts_id = path.to_str().unwrap().trim_start_matches("/dev/pts/");
+
+    // dbus message
+    let mut dbus = DBus::new()?;
+    dbus.append(user, path.to_str().unwrap(), pts_id, envs);
+    dbus.send()?;
+
+    // no longer used, close
+    close(pty.slave).map_err(|e| e.desc())?;
+    wait_master(pty.master)?;
+
+    Ok(pty.master)
+}
+
+/// Wait master for readable
+fn wait_master(master: RawFd) -> Result<(), String> {
+    let mut buff = [0; 128];
+    for _ in 1..10 {
+        thread::sleep(Duration::from_millis(100));
+        match read(master, &mut buff) {
+            Ok(_) => return Ok(()),
+            Err(Errno::EIO) => continue,
+            Err(e) => return Err(e.desc().to_string()),
+        }
     }
-
-    // new method call
-    let m: *mut DBusMessage = dbus_message_new_method_call(
-        "org.freedesktop.machine1\0".as_ptr() as *const _,
-        "/org/freedesktop/machine1\0".as_ptr() as *const _,
-        "org.freedesktop.machine1.Manager\0".as_ptr() as *const _,
-        "OpenMachineShell\0".as_ptr() as *const _,
-    );
-
-    // Append args
-    let mut iter: DBusMessageIter = mem::zeroed();
-    dbus_message_iter_init_append(m, &mut iter);
-    append_string(&mut iter, ".host\0");
-    append_string(&mut iter, user.as_str());
-    append_string(&mut iter, "\0");
-    append_array_string(m, &mut iter, args);
-    append_array_string(m, &mut iter, envs);
-
-    // Send message and recive reply then close conn
-    let msg = dbus_connection_send_with_reply_and_block(conn, m, 3000, &mut e);
-    if msg.is_null() {
-        return Err(e);
-    }
-
-    // Get result
-    let mut i: DBusMessageIter = mem::zeroed();
-    dbus_message_iter_init(msg, &mut i);
-    let mut fd: RawFd = mem::zeroed();
-    dbus_message_iter_get_basic(&mut i, &mut fd as *mut _ as *mut _);
-
-    // Release all pointer resources
-    dbus_connection_close(conn);
-    dbus_connection_unref(conn);
-    dbus_message_unref(m);
-    dbus_message_unref(msg);
-
-    Ok(fd)
+    Err("Waiting master readable timeout".to_string())
 }
