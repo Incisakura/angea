@@ -26,7 +26,7 @@ fn main() {
 
 fn help() {
     print!(
-        "Angea v0.0.4
+        "Angea v0.0.5
 Usage: angea <command> [more]
 Command:
     boot            Boot systemd as daemon
