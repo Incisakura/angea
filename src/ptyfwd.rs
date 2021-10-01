@@ -42,7 +42,10 @@ impl PTYForward {
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, master_fd, &mut master_event)?;
         epoll::epoll_ctl(epoll, EpollOp::EpollCtlAdd, sig_fd, &mut sig_event)?;
 
-        let (stdin_origin, stdout_origin) = Self::set_termios()?;
+        let stdin_origin = set_raw_termios(STDIN)?;
+        let stdout_origin = set_raw_termios(STDOUT)?;
+        set_nonblock(STDIN, true)?;
+        set_nonblock(master_fd, true)?;
 
         let f = Self {
             epoll,
@@ -51,7 +54,6 @@ impl PTYForward {
             stdout_origin,
             signal_fd,
         };
-        f.set_nonblock(true)?;
         f.window_resize()?;
 
         Ok(f)
@@ -85,41 +87,6 @@ impl PTYForward {
                 }
             }
         }
-        self.disconnect()?;
-        Ok(())
-    }
-
-    /// Set termios config for stdin/stdout, and return origin config.
-    ///
-    /// Return with `(stdin_origin, stdout_origin)`.
-    fn set_termios() -> Result<(Termios, Termios)> {
-        fn set(fd: RawFd) -> Result<Termios> {
-            let stdin_origin = termios::tcgetattr(fd)?;
-            let mut stdin_attr = stdin_origin.clone();
-            termios::cfmakeraw(&mut stdin_attr);
-            termios::tcsetattr(fd, SetArg::TCSANOW, &stdin_attr)?;
-            Ok(stdin_origin)
-        }
-
-        Ok((set(STDIN)?, set(STDOUT)?))
-    }
-
-    /// Set non-block status of stdin/master
-    fn set_nonblock(&self, nonblock: bool) -> Result<()> {
-        fn set(fd: RawFd, nonblock: bool) -> Result<()> {
-            let bits = fcntl(fd, FcntlArg::F_GETFL)?;
-            let mut flags = unsafe { OFlag::from_bits_unchecked(bits) };
-            flags = if nonblock {
-                flags | OFlag::O_NONBLOCK
-            } else {
-                flags & !OFlag::O_NONBLOCK
-            };
-            fcntl(fd, FcntlArg::F_SETFL(flags))?;
-            Ok(())
-        }
-
-        set(STDIN, nonblock)?;
-        set(self.master_fd, nonblock)?;
         Ok(())
     }
 
@@ -152,10 +119,32 @@ impl PTYForward {
     }
 
     /// Recovery termios and non-block status
-    fn disconnect(&self) -> Result<()> {
+    pub fn disconnect(self) -> Result<()> {
         termios::tcsetattr(STDOUT, SetArg::TCSANOW, &self.stdout_origin)?;
         termios::tcsetattr(STDIN, SetArg::TCSANOW, &self.stdin_origin)?;
-        self.set_nonblock(false)?;
+        set_nonblock(STDIN, false)?;
         Ok(())
     }
+}
+
+/// Set I/O non-block
+pub fn set_nonblock(fd: RawFd, nonblock: bool) -> Result<()> {
+    let bits = fcntl(fd, FcntlArg::F_GETFL)?;
+    let mut flags = unsafe { OFlag::from_bits_unchecked(bits) };
+    flags = if nonblock {
+        flags | OFlag::O_NONBLOCK
+    } else {
+        flags & !OFlag::O_NONBLOCK
+    };
+    fcntl(fd, FcntlArg::F_SETFL(flags))?;
+    Ok(())
+}
+
+/// Set raw termios config, return origin config for recovery
+fn set_raw_termios(fd: RawFd) -> Result<Termios> {
+    let stdin_origin = termios::tcgetattr(fd)?;
+    let mut stdin_attr = stdin_origin.clone();
+    termios::cfmakeraw(&mut stdin_attr);
+    termios::tcsetattr(fd, SetArg::TCSANOW, &stdin_attr)?;
+    Ok(stdin_origin)
 }

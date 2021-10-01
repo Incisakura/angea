@@ -21,7 +21,8 @@ pub fn enter(user: &str) {
 
     let master = unsafe { get_pty(user).unwrap_or_else(|e| panic!("{}", e)) };
     let mut f = PTYForward::new(master).unwrap_or_else(|e| panic!("{}", e.desc()));
-    f.wait().unwrap_or_else(|e| panic!("{}", e.desc()));
+    f.wait().unwrap_or_else(|e| eprintln!("{}", e.desc()));
+    f.disconnect().unwrap(); // should no error here
 }
 
 fn is_inside() -> bool {
