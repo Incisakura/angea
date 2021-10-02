@@ -7,8 +7,9 @@ use libdbus_sys::*;
 
 pub struct DBus {
     conn: *mut DBusConnection,
-    message: *mut DBusMessage,
     error: DBusError,
+    message: *mut DBusMessage,
+    reply: *mut DBusMessage,
 }
 
 #[rustfmt::skip]
@@ -24,7 +25,7 @@ impl DBus {
         let mut error: DBusError = mem::zeroed();
         let conn: *mut DBusConnection = dbus_bus_get_private(DBusBusType::System, &mut error);
 
-        let dbus = DBus { conn, message, error };
+        let dbus = DBus { conn, message, error, reply: ptr::null_mut() };
         if dbus.conn.is_null() {
             return Err(dbus.get_error());
         }
@@ -56,8 +57,8 @@ impl DBus {
 
     /// Send dbus message
     pub unsafe fn send(&mut self) -> Result<(), String> {
-        let msg = dbus_connection_send_with_reply_and_block(self.conn, self.message, 3000, &mut self.error);
-        if msg.is_null() {
+        self.reply = dbus_connection_send_with_reply_and_block(self.conn, self.message, 3000, &mut self.error);
+        if self.reply.is_null() {
             return Err(self.get_error());
         }
         Ok(())
@@ -117,6 +118,18 @@ impl DBus {
                     dbus_message_iter_append_basic(&mut c.sub, DBUS_TYPE_BOOLEAN, &1 as *const _ as *const _);
                 }
             }
+        }
+    }
+}
+
+// Drop pointer resources
+impl Drop for DBus {
+    fn drop(&mut self) {
+        unsafe {
+            dbus_connection_close(self.conn);
+            dbus_connection_unref(self.conn);
+            dbus_message_unref(self.message);
+            dbus_message_unref(self.reply);
         }
     }
 }
