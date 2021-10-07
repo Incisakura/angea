@@ -94,13 +94,10 @@ impl PTYForward {
     fn window_resize(&self) -> Result<()> {
         unsafe {
             let mut window: winsize = mem::zeroed();
-            if libc::ioctl(STDOUT, TIOCGWINSZ, &mut window) >= 0
-                && libc::ioctl(self.master_fd, TIOCSWINSZ, &window) >= 0
-            {
-                return Ok(());
-            }
+            Errno::result(libc::ioctl(STDOUT, TIOCGWINSZ, &mut window))?;
+            Errno::result(libc::ioctl(self.master_fd, TIOCSWINSZ, &window))?;
         }
-        Err(Errno::last())
+        Ok(())
     }
 
     /// Handle I/O event, forward data `from => to`
