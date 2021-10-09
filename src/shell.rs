@@ -19,7 +19,7 @@ pub fn enter(user: &str) {
         panic!("Systemd is already running in current PID namespace.");
     }
 
-    let master = unsafe { get_pty(user).unwrap_or_else(|e| panic!("{}", e)) };
+    let master = get_pty(user).unwrap_or_else(|e| panic!("{}", e));
     let mut f = PTYForward::new(master).unwrap_or_else(|e| panic!("{}", e.desc()));
     f.wait().unwrap_or_else(|e| eprintln!("{}", e.desc()));
     f.disconnect().unwrap(); // should no error here
@@ -34,7 +34,7 @@ fn is_inside() -> bool {
         .map_or(false, |s| s.success())
 }
 
-unsafe fn get_pty(user: &str) -> Result<RawFd, String> {
+fn get_pty(user: &str) -> Result<RawFd, String> {
     // collect environment variables
     let envs: Vec<String> = env::vars()
         .filter_map(|(k, v)| {
@@ -52,9 +52,11 @@ unsafe fn get_pty(user: &str) -> Result<RawFd, String> {
     let pts_id = path.to_str().unwrap().trim_start_matches("/dev/pts/");
 
     // dbus message
-    let mut dbus: DBus = wait_systemd()?;
-    dbus.append(user, path.to_str().unwrap(), pts_id, envs);
-    dbus.send()?;
+    unsafe {
+        let mut dbus: DBus = wait_systemd()?;
+        dbus.append(user, path.to_str().unwrap(), pts_id, envs);
+        dbus.send()?;
+    }
 
     // no longer used, close
     close(pty.slave).map_err(|e| e.desc())?;
