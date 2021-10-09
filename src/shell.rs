@@ -52,7 +52,7 @@ unsafe fn get_pty(user: &str) -> Result<RawFd, String> {
     let pts_id = path.to_str().unwrap().trim_start_matches("/dev/pts/");
 
     // dbus message
-    let mut dbus = DBus::new()?;
+    let mut dbus: DBus = wait_systemd()?;
     dbus.append(user, path.to_str().unwrap(), pts_id, envs);
     dbus.send()?;
 
@@ -63,10 +63,21 @@ unsafe fn get_pty(user: &str) -> Result<RawFd, String> {
     Ok(pty.master)
 }
 
+/// Wait systemd init
+unsafe fn wait_systemd() -> Result<DBus, String> {
+    for _ in 0..10 {
+        thread::sleep(Duration::from_millis(100));
+        if let Ok(d) = DBus::new() {
+            return Ok(d);
+        }
+    };
+    Err("Waiting systemd init timeout".to_string())
+}
+
 /// Wait master for readable
 fn wait_master(master: RawFd) -> Result<(), String> {
     let mut buff = [0; 128];
-    for _ in 1..10 {
+    for _ in 0..10 {
         thread::sleep(Duration::from_millis(100));
         match read(master, &mut buff) {
             Ok(_) => return Ok(()),

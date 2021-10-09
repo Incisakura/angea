@@ -12,26 +12,31 @@ pub struct DBus {
     reply: *mut DBusMessage,
 }
 
-#[rustfmt::skip]
 impl DBus {
     /// New DBus message & connection instance
     pub unsafe fn new() -> Result<DBus, String> {
+        let mut error: DBusError = mem::zeroed();
+        let conn: *mut DBusConnection = dbus_bus_get_private(DBusBusType::System, &mut error);
+        if conn.is_null() {
+            return Err(Self::get_error(error.name));
+        }
+
         let message: *mut DBusMessage = dbus_message_new_method_call(
             "org.freedesktop.systemd1\0".as_ptr() as *const _,
             "/org/freedesktop/systemd1\0".as_ptr() as *const _,
             "org.freedesktop.systemd1.Manager\0".as_ptr() as *const _,
             "StartTransientUnit\0".as_ptr() as *const _,
         );
-        let mut error: DBusError = mem::zeroed();
-        let conn: *mut DBusConnection = dbus_bus_get_private(DBusBusType::System, &mut error);
 
-        let dbus = DBus { conn, message, error, reply: ptr::null_mut() };
-        if dbus.conn.is_null() {
-            return Err(dbus.get_error());
-        }
-        Ok(dbus)
+        Ok(DBus {
+            conn,
+            message,
+            error,
+            reply: ptr::null_mut(),
+        })
     }
 
+    #[rustfmt::skip]
     /// Append args to dbus message
     pub unsafe fn append(&mut self, user: &str, slave: &str, pts_id: &str, envs: Vec<String>) {
         let service = format!("container-shell@{}.service\0", pts_id);
@@ -57,21 +62,27 @@ impl DBus {
 
     /// Send dbus message
     pub unsafe fn send(&mut self) -> Result<(), String> {
-        self.reply = dbus_connection_send_with_reply_and_block(self.conn, self.message, 3000, &mut self.error);
+        self.reply = dbus_connection_send_with_reply_and_block(
+            self.conn,
+            self.message,
+            3000,
+            &mut self.error,
+        );
         if self.reply.is_null() {
-            return Err(self.get_error());
+            return Err(Self::get_error(self.error.name));
         }
         Ok(())
     }
 
     /// Get error message
-    unsafe fn get_error(&self) -> String {
-        match CStr::from_ptr(self.error.name).to_str() {
+    unsafe fn get_error(ptr: *const c_char) -> String {
+        match CStr::from_ptr(ptr).to_str() {
             Ok(s) => String::from(s),
             Err(e) => e.to_string(),
         }
     }
 
+    #[rustfmt::skip]
     /// Append struct ss: `String - String`
     unsafe fn append_struct_ss(&self, i: *mut DBusMessageIter, s: &str, v: &str) {
         let mut c = Container::new(self.message, i, DBUS_TYPE_STRUCT, ptr::null());
@@ -82,6 +93,7 @@ impl DBus {
         }
     }
 
+    #[rustfmt::skip]
     //// Append struct environment
     unsafe fn append_struct_envs(&self, i: *mut DBusMessageIter, envs: Vec<String>) {
         let mut c = Container::new(self.message, i, DBUS_TYPE_STRUCT, ptr::null());
@@ -97,6 +109,7 @@ impl DBus {
         }
     }
 
+    #[rustfmt::skip]
     /// Append struct exec path and args
     unsafe fn append_struct_exec(&self, i: *mut DBusMessageIter) {
         let args = ["/bin/bash\0", "-l\0"];
