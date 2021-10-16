@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CString, OsStr};
 use std::fs;
 use std::io;
 use std::str::FromStr;
@@ -12,58 +12,25 @@ use nix::Result;
 pub struct Systemd(Pid);
 
 impl Systemd {
-    /// Try to fetch running systemd
+    /// Try to fetch a running systemd process
     pub fn fetch() -> Option<Systemd> {
-        let raw_pid = Self::from_proc().expect("Unable to read /proc");
-        if raw_pid == 0 {
-            return None;
-        }
-        Some(Self(Pid::from_raw(raw_pid)))
+        Self::from_proc().expect("Failed to read procfs")
     }
 
-    /// Try to fetch systemd or create a new one
-    pub fn fetch_or_create() -> Systemd {
-        match Self::fetch() {
-            Some(s) => s,
-            None => Self::create().expect("Unable to spawn systemd"),
+    /// Create a new systemd process if necessary
+    pub fn fetch_or_create() {
+        if Self::fetch().is_none() {
+            Self::create().expect("Failed to spawn systemd process");
         }
     }
 
-    /// Try to fetch systemd from /proc
-    fn from_proc() -> io::Result<i32> {
-        for entry in fs::read_dir("/proc")? {
-            let mut path = entry?.path();
-            if path.is_dir() {
-                let pid = match path.file_name().and_then(|f| f.to_str()).map(i32::from_str) {
-                    Some(Ok(p)) => p,
-                    _ => continue,
-                };
-                path.push("comm");
-                let comm = match fs::read_to_string(path) {
-                    Ok(str) => str,
-                    _ => continue,
-                };
-                if comm == "systemd\n" {
-                    return Ok(pid);
-                }
-            }
-        }
-        return Ok(0);
-    }
-
+    /// Kill running systemd process
     pub fn shutdown(self) {
-        if self.0.as_raw() != 0 {
-            kill(self.0, Signal::SIGKILL).unwrap_or_else(|_| {
-                panic!(
-                    "Unable to kill systemd PID: {}. Are you in container?",
-                    self.0.as_raw()
-                );
-            });
-        }
+        kill(self.0, Signal::SIGKILL).expect("Failed to kill systemd. Are you in container?");
     }
 
+    /// Start a new systemd process
     fn create() -> Result<Systemd> {
-        // Spawn child process
         let mut stack = [0; 4096];
         let pid = clone(
             Box::new(|| -> isize {
@@ -84,7 +51,24 @@ impl Systemd {
             CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
             None,
         )?;
+        Ok(Systemd(pid))
+    }
 
-        return Ok(Systemd(pid));
+    /// Try to fetch `Systemd` from procfs
+    fn from_proc() -> io::Result<Option<Systemd>> {
+        for entry in fs::read_dir("/proc")? {
+            let mut path = entry?.path();
+            if path.is_dir() {
+                let pid = match path.file_name().and_then(OsStr::to_str).map(i32::from_str) {
+                    Some(Ok(p)) => p,
+                    _ => continue,
+                };
+                path.push("comm"); // /proc/PID/comm
+                if fs::read_to_string(path)? == "systemd\n" {
+                    return Ok(Some(Systemd(Pid::from_raw(pid))));
+                }
+            }
+        }
+        Ok(None)
     }
 }
