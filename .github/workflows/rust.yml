@@ -16,8 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install libdbus-1-dev
-      run: sudo apt install libdbus-1-dev
+    - name: Install libsystemd-dev
+      run: sudo apt install -y libsystemd-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
