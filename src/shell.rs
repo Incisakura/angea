@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::env;
 use std::ffi::{c_void, CStr, CString};
 use std::mem;
 use std::mem::MaybeUninit;
@@ -214,16 +216,46 @@ const SD_BUS_TYPE_STRUCT: c_char = 'r' as c_char;
 #[rustfmt::skip]
 /// D-Bus call to spawn a shell service in systemd
 unsafe fn dbus(user: &str, slave: &str) -> Result<()> {
-    // Prepare arguments
-    let mut args = [
-        "/bin/bash\0".as_ptr() as *mut c_char,
-        "-l\0".as_ptr() as *mut c_char,
-        ptr::null_mut(),
-    ];
-    let mut envs = [
-        "TERM=xterm-256color\0".as_ptr() as *mut c_char,
-        ptr::null_mut(),
-    ];
+    let envs: HashMap<String, String> = env::vars().collect();
+    // Process Arguments
+    let mut raw_args: Vec<String> = envs.get("ARGS").map(|v| {
+        let mut vec = Vec::new();
+        for s in v.split_whitespace() {
+            vec.push(format!("{}\n", s));
+        }
+        vec
+    }).unwrap_or(vec![
+        "/bin/bash\0".to_string(),
+        "-l\0".to_string(),
+    ]);
+    let mut args: Vec<*mut c_char> = Vec::new();
+    for raw_arg in raw_args.iter_mut() {
+        args.push(raw_arg.as_mut_ptr().cast())
+    }
+    args.push(ptr::null_mut());
+
+    // Environment Variables
+    let env_inherit: Option<Vec<&str>> = envs.get("ENV_INHERIT").map(|v| v.split(",").collect());
+    let mut raw_envs : Vec<String> = envs.get("ENVS").map(|v| {
+        let mut vec = Vec::new();
+        for s in v.split(",") {
+            vec.push(format!("{}\n", s));
+        }
+        if let Some(s) = env_inherit {
+            for k in s  {
+                if let Some(s) = envs.get(k) {
+                    vec.push(format!("{}={}\0", k, s));
+                }
+            }
+        } 
+        vec
+    }).unwrap_or(Vec::new());
+    let mut envs: Vec<*mut c_char> = Vec::new();
+    for raw_env in raw_envs.iter_mut() {
+        envs.push(raw_env.as_mut_ptr().cast())
+    }
+    envs.push(ptr::null_mut());
+
     let pts_id = slave.trim_start_matches("/dev/pts/");
     let service =
         CString::new(format!("angea-shell@{}.service", pts_id)).map_err(|_| Errno::EINVAL)?;
