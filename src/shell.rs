@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::env;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_void, CString};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
@@ -282,7 +282,7 @@ unsafe fn dbus(user: &str, slave: &str) -> Result<()> {
     assert(sd_bus_message_append(
         message,
         char("ss\0"),
-        void(service.as_c_str()),
+        void(&service),
         void("fail\0"),
     ))?;
 
@@ -295,8 +295,8 @@ unsafe fn dbus(user: &str, slave: &str) -> Result<()> {
         void("StandardOutput\0"),   void("s\0"), void("tty\0"),
         void("StandardInput\0"),    void("s\0"), void("tty\0"),
         void("StandardError\0"),    void("s\0"), void("tty\0"),
-        void("TTYPath\0"),          void("s\0"), void(slave.as_c_str()),
-        void("User\0"),             void("s\0"), void(user.as_c_str()),
+        void("TTYPath\0"),          void("s\0"), void(&slave),
+        void("User\0"),             void("s\0"), void(&user),
     ))?;
 
     // Environment
@@ -368,7 +368,7 @@ trait StrLike: Sized {
     }
 }
 
-impl StrLike for &CStr {
+impl StrLike for &CString {
     fn as_char_ptr(&self) -> *const c_char {
         self.as_ptr()
     }
