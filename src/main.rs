@@ -3,7 +3,7 @@ use std::env;
 use angea::shell::{get_pty, PTYForward};
 use angea::systemd::Systemd;
 
-const VERSION: &str = "0.0.5";
+const VERSION: &str = "0.0.6";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
