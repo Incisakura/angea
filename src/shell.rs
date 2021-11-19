@@ -148,8 +148,11 @@ impl PTYForward {
     fn window_resize(&self) -> Result<()> {
         unsafe {
             let mut window: winsize = mem::zeroed();
-            Errno::result(libc::ioctl(STDOUT, TIOCGWINSZ, &mut window))?;
-            Errno::result(libc::ioctl(self.master_fd, TIOCSWINSZ, &window))?;
+            if libc::ioctl(STDOUT, TIOCGWINSZ, &mut window) == -1
+                || libc::ioctl(self.master_fd, TIOCSWINSZ, &window) == -1
+            {
+                return Err(Errno::last());
+            }
         }
         Ok(())
     }
