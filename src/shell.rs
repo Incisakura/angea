@@ -119,7 +119,7 @@ impl PTYForward {
         'epoll: loop {
             events.clear();
             unsafe { events.set_len(256) };
-            epoll::epoll_wait(self.epoll, &mut events, 1000)?;
+            epoll::epoll_wait(self.epoll, &mut events, -1)?;
             for ev in &events {
                 match ev.data() {
                     0 => {
