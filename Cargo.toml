@@ -4,8 +4,8 @@ version = "0.0.7"
 edition = "2021"
 
 [dependencies]
-libc = "0.2.120"
-nix = "0.23.1"
+libc = "0.2.124"
+nix = { version = "0.24.0", features = ["event", "sched", "signal", "term"]}
 libsystemd-sys = "0.9.3"
 
 [profile.release]
@@ -13,3 +13,4 @@ opt-level = 3
 lto = true
 panic = "abort"
 codegen-units = 1
+strip = true
