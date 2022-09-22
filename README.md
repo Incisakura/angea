@@ -7,6 +7,10 @@ A lite tool to make systemd work in Windows Subsystem for Linux 2
 
 **WSL1 is not supported.**
 
+## Attention
+
+Microsoft has officially released systemd support for WLS. Thus, this repository has reached its end. It would be archived. For more about that, see [here](https://devblogs.microsoft.com/commandline/systemd-support-is-now-available-in-wsl/) or further documents from Microsoft.
+
 ## Usage
 
 See `angea help`
