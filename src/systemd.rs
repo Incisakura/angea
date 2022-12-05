@@ -9,10 +9,10 @@ use nix::sys::stat::Mode;
 use nix::unistd::{close, execve, read, Pid};
 use nix::Result;
 
-/// Start a new systemd process
-pub fn start() -> Result<Pid> {
+/// Start a systemd process in a new PID namespace.
+pub fn start() -> Result<()> {
     let mut stack = [0; 4096];
-    let pid = clone(
+    clone(
         Box::new(|| -> isize {
             let args = [CString::new("/lib/systemd/systemd").unwrap()];
             let environ: [CString; 0] = [];
@@ -31,11 +31,11 @@ pub fn start() -> Result<Pid> {
         CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS,
         None,
     )?;
-    Ok(pid)
+    Ok(())
 }
 
-/// Try to fetch `Systemd` from procfs
-pub fn from_proc() -> Result<Option<Pid>> {
+/// Try to get running systemd pid from procfs
+pub fn get_running() -> Result<Option<Pid>> {
     let proc = Dir::open("/proc", OFlag::O_DIRECTORY, Mode::empty())?;
     for entry in proc {
         match entry {
@@ -55,7 +55,7 @@ pub fn from_proc() -> Result<Option<Pid>> {
                 let fd = open(path.as_str(), OFlag::O_RDONLY, Mode::empty())?;
                 let mut buf = [0; 8];
                 let n = read(fd, &mut buf)?;
-                if &buf[..n] == "systemd\n".as_bytes() {
+                if &buf[..n] == b"systemd\n" {
                     return Ok(Some(Pid::from_raw(pid)));
                 }
                 close(fd)?;
@@ -66,9 +66,11 @@ pub fn from_proc() -> Result<Option<Pid>> {
     Ok(None)
 }
 
-/// Kill running systemd process
-pub fn shutdown(pid: Pid) {
-    if let Err(e) = kill(pid, Signal::SIGKILL) {
-        eprintln!("{}", e);
+/// Kill running process
+pub fn shutdown() -> Result<()> {
+    if let Some(pid) = get_running()? {
+        kill(pid, Signal::SIGKILL)
+    } else {
+        Ok(())
     }
 }

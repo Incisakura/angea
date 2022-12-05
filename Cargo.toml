@@ -1,12 +1,12 @@
 [package]
 name = "angea"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2021"
 
 [dependencies]
-libc = "0.2.124"
-nix = { version = "0.24.0", features = ["event", "sched", "signal", "term"]}
-libsystemd-sys = "0.9.3"
+libc = "0.2"
+nix = { version = "0.26", default-features = false, features = ["event", "dir", "mount", "sched", "signal", "term"]}
+libsystemd-sys = "0.9"
 
 [profile.release]
 opt-level = 3
